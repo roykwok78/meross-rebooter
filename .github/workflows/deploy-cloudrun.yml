@@ -29,12 +29,9 @@ jobs:
 
       - name: Deploy (from source)
         run: |
-          gcloud run deploy "${{ secrets.CLOUD_RUN_SERVICE_NAME }}" \
+          gcloud --quiet run deploy "${{ secrets.CLOUD_RUN_SERVICE_NAME }}" \
             --source . \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --region "${{ secrets.GCP_REGION }}" \
             --allow-unauthenticated \
             --set-env-vars "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }},MEROSS_TOKEN_ENC_KEY=${{ secrets.MEROSS_TOKEN_ENC_KEY }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}"
-
-
-
