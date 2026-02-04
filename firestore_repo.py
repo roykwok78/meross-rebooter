@@ -10,14 +10,9 @@ COL_ACCOUNTS = "merossAccounts"
 
 class FirestoreRepo:
     def __init__(self):
-        # Cloud Run 上通常用預設服務帳號即可
         self.db = firestore.Client(project=os.getenv("GCP_PROJECT_ID") or None)
 
     def create_or_update_account_auth(self, email: str, token_plain: str) -> str:
-        """
-        保存 email + 加密後 token
-        token_plain：由 meross-iot 登入後取得的 token / session 資料（字串化）
-        """
         now = datetime.now(timezone.utc).isoformat()
         doc_ref = self.db.collection(COL_ACCOUNTS).document()
         doc_ref.set(
