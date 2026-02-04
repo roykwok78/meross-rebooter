@@ -1,7 +1,10 @@
 import os
+import uuid
+import logging
+import traceback
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import (
@@ -16,6 +19,9 @@ from meross_service import MerossService
 
 APP_NAME = "meross-connector-api"
 
+logger = logging.getLogger("app")
+logger.setLevel(logging.INFO)
+
 def require_admin(x_admin_key: Optional[str]) -> None:
     expected = os.getenv("ADMIN_API_KEY", "").strip()
     if not expected:
@@ -25,7 +31,6 @@ def require_admin(x_admin_key: Optional[str]) -> None:
 
 app = FastAPI(title=APP_NAME)
 
-# CORS（前端係你嘅 Admin 平台；第一階段可先開放，之後再鎖 domain）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -44,16 +49,19 @@ def health():
 @app.post(
     "/accounts",
     response_model=CreateAccountResponse,
-    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
 )
 async def create_account(
     payload: CreateAccountRequest,
+    request: Request,
     x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
 ):
     require_admin(x_admin_key)
 
     if not payload.email or not payload.password:
         raise HTTPException(status_code=400, detail="email and password are required.")
+
+    req_id = str(uuid.uuid4())[:8]
 
     try:
         result = await meross.connect_account(email=payload.email, password=payload.password)
@@ -63,55 +71,11 @@ async def create_account(
             devices=result["devices"],
         )
     except ValueError as e:
+        # 仍然係 login failed / business error → 401
+        logger.warning("req_id=%s /accounts login failed: %s", req_id, str(e))
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
-        # 千祈唔好 log password / token
-        raise HTTPException(status_code=500, detail=f"Internal error: {type(e).__name__}")
-
-@app.post(
-    "/accounts/{account_id}/sync",
-    response_model=SyncResponse,
-    responses={403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
-)
-async def sync_devices(
-    account_id: str,
-    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
-):
-    require_admin(x_admin_key)
-
-    try:
-        result = await meross.sync_devices(account_id=account_id)
-        return SyncResponse(
-            accountId=account_id,
-            syncedAt=result["syncedAt"],
-            devices=result["devices"],
-        )
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Account not found.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal error: {type(e).__name__}")
-
-@app.get(
-    "/accounts/{account_id}/devices",
-    response_model=DevicesResponse,
-    responses={403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
-)
-async def get_devices(
-    account_id: str,
-    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
-):
-    require_admin(x_admin_key)
-
-    try:
-        data = repo.get_account_devices(account_id=account_id)
-        if data is None:
-            raise HTTPException(status_code=404, detail="Account not found.")
-        return DevicesResponse(
-            accountId=account_id,
-            lastSyncedAt=data.get("lastSyncedAt"),
-            devices=data.get("devices", []),
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal error: {type(e).__name__}")
+        # 500：打印 traceback（唔包含 email/password；但 traceback 會顯示程式行號/方法名）
+        tb = traceback.format_exc()
+        logger.error("req_id=%s /accounts internal error type=%s\n%s", req_id, type(e).__name__, tb)
+        raise HTTPException(status_code=500, detail=f"Internal error ({req_id}): {type(e).__name__}")
