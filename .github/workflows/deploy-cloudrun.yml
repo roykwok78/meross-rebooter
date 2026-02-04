@@ -33,6 +33,6 @@ jobs:
             --source . \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --region "${{ secrets.GCP_REGION }}" \
-            --build-service-account "${{ secrets.GCP_PROJECT_NUMBER }}@cloudbuild.gserviceaccount.com" \
+            --build-service-account "projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/${{ secrets.GCP_PROJECT_NUMBER }}@cloudbuild.gserviceaccount.com" \
             --allow-unauthenticated \
             --set-env-vars "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }},MEROSS_TOKEN_ENC_KEY=${{ secrets.MEROSS_TOKEN_ENC_KEY }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}"
