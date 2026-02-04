@@ -85,12 +85,26 @@ class MerossService:
                     pass
 
     def _extract_token_payload(self, http: Any) -> Dict[str, Any]:
+        """
+        Extract a JSON-serializable, whitelisted token payload from meross-iot client.
+        This avoids serializing MerossCloudCreds objects directly, which causes 500 errors.
+        """
         if hasattr(http, "cloud_credentials"):
-            creds = getattr(http, "cloud_credentials")
-            return {"cloud_credentials": self._json_safe(creds)}
+            c = http.cloud_credentials
+            return {
+                "user_id": getattr(c, "userid", None),
+                "key": getattr(c, "key", None),
+                "token": getattr(c, "token", None),
+                "domain": getattr(c, "domain", None),
+                "mqtt_domain": getattr(c, "mqtt_domain", None),
+                "issued_at": getattr(c, "issued_at", None),
+                "expires_in": getattr(c, "expires_in", None),
+            }
 
         if hasattr(http, "token"):
-            return {"token": self._json_safe(getattr(http, "token"))}
+            return {
+                "token": str(http.token)
+            }
 
         return {"session": "unknown"}
 
@@ -200,3 +214,7 @@ class MerossService:
                     )
 
         return devices
+    
+
+
+    
